@@ -38,7 +38,7 @@ CREATE TABLE `elo_history` (
   CONSTRAINT `fk_eh_game` FOREIGN KEY (`game_id`) REFERENCES `games` (`game_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_eh_match` FOREIGN KEY (`match_id`) REFERENCES `matches` (`match_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_eh_player` FOREIGN KEY (`player_id`) REFERENCES `players` (`player_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -57,7 +57,7 @@ CREATE TABLE `games` (
   PRIMARY KEY (`game_id`),
   UNIQUE KEY `uq_games_title` (`title`),
   CONSTRAINT `chk_team_size` CHECK ((`team_size` between 1 and 10))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=4 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -83,6 +83,37 @@ CREATE TABLE `match_players` (
   CONSTRAINT `chk_team_number` CHECK ((`team_number` in (1,2)))
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER `trg_match_players_after_update` AFTER UPDATE ON `match_players` FOR EACH ROW BEGIN
+    IF NEW.elo_after IS NOT NULL AND OLD.elo_after IS NULL THEN
+        UPDATE player_game_stats s
+        JOIN matches m ON m.match_id = NEW.match_id
+        SET s.elo_rating     = NEW.elo_after,
+            s.matches_played = s.matches_played + 1,
+            s.wins   = s.wins   + IF(m.winning_team = NEW.team_number, 1, 0),
+            s.losses = s.losses + IF(m.winning_team IS NOT NULL AND m.winning_team <> NEW.team_number, 1, 0),
+            s.draws  = s.draws  + IF(m.winning_team IS NULL, 1, 0),
+            s.last_played_at = NOW()
+        WHERE s.player_id = NEW.player_id AND s.game_id = m.game_id;
+
+        INSERT INTO elo_history (player_id, game_id, match_id, old_elo, new_elo)
+        SELECT NEW.player_id, m.game_id, NEW.match_id, NEW.elo_before, NEW.elo_after
+        FROM matches m WHERE m.match_id = NEW.match_id;
+    END IF;
+END */;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 
 --
 -- Table structure for table `matches`
@@ -106,7 +137,7 @@ CREATE TABLE `matches` (
   CONSTRAINT `fk_matches_game` FOREIGN KEY (`game_id`) REFERENCES `games` (`game_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_matches_tourn` FOREIGN KEY (`tournament_id`) REFERENCES `tournaments` (`tournament_id`) ON DELETE SET NULL,
   CONSTRAINT `chk_match_times` CHECK (((`ended_at` is null) or (`started_at` is null) or (`ended_at` >= `started_at`)))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -129,6 +160,28 @@ CREATE TABLE `matchmaking_queue` (
   CONSTRAINT `fk_queue_player` FOREIGN KEY (`player_id`) REFERENCES `players` (`player_id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER `trg_queue_before_insert` BEFORE INSERT ON `matchmaking_queue` FOR EACH ROW BEGIN
+    INSERT INTO player_game_stats (player_id, game_id)
+    SELECT NEW.player_id, NEW.game_id
+    WHERE NOT EXISTS (
+        SELECT 1 FROM player_game_stats
+        WHERE player_id = NEW.player_id AND game_id = NEW.game_id
+    );
+END */;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 
 --
 -- Table structure for table `player_game_stats`
@@ -237,7 +290,7 @@ CREATE TABLE `users` (
   UNIQUE KEY `uq_users_username` (`username`),
   UNIQUE KEY `uq_users_email` (`email`),
   CONSTRAINT `chk_username_len` CHECK ((char_length(`username`) >= 3))
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -264,6 +317,86 @@ SET character_set_client = @saved_cs_client;
 --
 -- Dumping routines for database 'esports_platform'
 --
+/*!50003 DROP PROCEDURE IF EXISTS `sp_settle_match` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `sp_settle_match`(IN p_match_id INT, IN p_winning_team TINYINT)
+BEGIN
+    DECLARE v_k INT DEFAULT 32;
+    DECLARE v_status VARCHAR(20);
+    DECLARE v_team1_avg DECIMAL(10,2);
+    DECLARE v_team2_avg DECIMAL(10,2);
+    DECLARE v_expected1 DECIMAL(10,4);
+    DECLARE v_expected2 DECIMAL(10,4);
+    DECLARE v_score1 DECIMAL(3,2);
+    DECLARE v_score2 DECIMAL(3,2);
+
+    DECLARE EXIT HANDLER FOR SQLEXCEPTION
+    BEGIN
+        ROLLBACK;
+        RESIGNAL;
+    END;
+
+    IF p_winning_team IS NOT NULL AND p_winning_team NOT IN (1, 2) THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'winning_team must be 1, 2 or NULL (draw)';
+    END IF;
+
+    START TRANSACTION;
+
+    SELECT status INTO v_status FROM matches WHERE match_id = p_match_id FOR UPDATE;
+
+    IF v_status IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Match not found';
+    END IF;
+    IF v_status IN ('completed', 'cancelled') THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Match already settled or cancelled';
+    END IF;
+
+    SELECT AVG(elo_before) INTO v_team1_avg FROM match_players WHERE match_id = p_match_id AND team_number = 1;
+    SELECT AVG(elo_before) INTO v_team2_avg FROM match_players WHERE match_id = p_match_id AND team_number = 2;
+
+    IF v_team1_avg IS NULL OR v_team2_avg IS NULL THEN
+        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Both teams need at least one player';
+    END IF;
+
+    SET v_expected1 = 1 / (1 + POWER(10, (v_team2_avg - v_team1_avg) / 400));
+    SET v_expected2 = 1 / (1 + POWER(10, (v_team1_avg - v_team2_avg) / 400));
+
+    IF p_winning_team = 1 THEN
+        SET v_score1 = 1, v_score2 = 0;
+    ELSEIF p_winning_team = 2 THEN
+        SET v_score1 = 0, v_score2 = 1;
+    ELSE
+        SET v_score1 = 0.5, v_score2 = 0.5;
+    END IF;
+
+    
+    UPDATE matches
+    SET status = 'completed', winning_team = p_winning_team, ended_at = NOW()
+    WHERE match_id = p_match_id;
+
+    UPDATE match_players
+    SET elo_after = GREATEST(0, elo_before + ROUND(v_k * (v_score1 - v_expected1)))
+    WHERE match_id = p_match_id AND team_number = 1;
+
+    UPDATE match_players
+    SET elo_after = GREATEST(0, elo_before + ROUND(v_k * (v_score2 - v_expected2)))
+    WHERE match_id = p_match_id AND team_number = 2;
+
+    COMMIT;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 
 --
 -- Final view structure for view `v_leaderboard`
@@ -292,4 +425,4 @@ SET character_set_client = @saved_cs_client;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-10-27 16:13:23
+-- Dump completed on 2026-10-27 16:29:58
