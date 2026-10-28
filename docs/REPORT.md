@@ -409,3 +409,58 @@ WHERE match_id = p_match_id AND team_number = 1;
 The expected score is the standard ELO formula, computed from the two teams' average ratings. A player's new rating is the old rating plus K times (actual score minus expected score), with K = 32. The matches row is updated first so that the trigger, which fires when elo_after is set, sees the real winning_team. The second UPDATE (team 2) is identical with v_score2 and v_expected2.
 
 Worked example from match 8 (Chess.io, a 1v1): Alice 1437 against Bob 1333. Alice's expected score is about 0.65, so when she wins she gains about 32 x (1 - 0.65) = 11 points and Bob loses the same, which matches the +11 and -11 stored in elo_history.
+
+## 9. Architecture
+
+The application is a single Next.js project. React pages run in the browser and call API routes (route handlers) in the same project. The routes talk to the two databases.
+
+~~~mermaid
+flowchart LR
+    B["Browser: React pages<br/>login, leaderboard, dashboard, admin"]
+    A["Next.js API routes<br/>app/api/*"]
+    L["lib/auth.js<br/>JWT cookie, requireRole"]
+    M[("MySQL esports_platform<br/>tables, view, triggers, procedure")]
+    G[("MongoDB esports_logs<br/>match_events")]
+    B -->|"fetch, cookie sent automatically"| A
+    A --> L
+    A -->|"SQL, transactions"| M
+    A -->|"insert, aggregate"| G
+~~~
+
+### 9.1 Layers
+
+| Layer | Where | Responsibility |
+|---|---|---|
+| Presentation | web/app/*/page.js, web/components/Nav.js | Pages and the role-aware navigation bar. They hold no business rules and only call the API. |
+| API | web/app/api/**/route.js | Validates input, checks the session and role, runs the SQL or MongoDB operation, maps errors to HTTP status codes. |
+| Shared helpers | web/lib/mysql.js, mongo.js, auth.js | MySQL connection pool, MongoDB connection, session and role checks. |
+| Data (relational) | MySQL | Constraints, triggers and the settle procedure enforce the rules and keep ratings consistent. |
+| Data (documents) | MongoDB | Stores in-game events and runs the kills aggregation. |
+
+### 9.2 Authentication and roles
+
+1. POST /api/auth/login checks the email and the bcrypt hash, then signs a JWT carrying the user id, username and role.
+2. The token is stored in an httpOnly cookie named token, so page scripts cannot read it. The browser sends it with every request.
+3. Protected routes call requireRole(request, [roles]). It returns 401 when there is no valid session and 403 when the role is not allowed.
+4. The navigation bar asks GET /api/auth/me who is logged in and shows Dashboard to players and Admin to admin and staff. Pages such as /admin and /dashboard also check the response and show a message or redirect, but the API routes are the real enforcement.
+
+| Role | Can do |
+|---|---|
+| player | Join and leave queues, view own dashboard, leaderboard, search, kills analytics |
+| staff and admin | Everything a visitor can see, plus run matchmaking, settle matches, record events, list open matches |
+
+### 9.3 Example request flow: settling a match
+
+1. The admin clicks "Team 1 wins" on /admin. The page sends POST /api/matches/8/settle with { "winning_team": 1 }.
+2. The route checks the cookie and the admin or staff role, then validates the match id and winning team.
+3. The route calls sp_settle_match(8, 1). Inside one transaction the procedure locks the match, computes the new ratings and updates match_players.
+4. The update of elo_after fires trg_match_players_after_update, which updates player_game_stats and inserts the elo_history rows.
+5. The route returns 200 and the page reloads the open-matches list. Procedure errors become 404 (not found), 409 (already settled) or 400 (invalid input).
+
+### 9.4 Configuration
+
+All connection details and the signing secret come from environment variables in web/.env.local, which is not committed: MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE, MONGODB_URI, MONGODB_DB and JWT_SECRET. web/.env.example lists the names with empty values.
+
+### 9.5 Error handling
+
+Routes return specific 4xx codes for bad input and permission problems. Unexpected failures are logged on the server and returned to the client as a generic "Internal server error", so database details are not exposed. Multi-step writes (register, matchmaking, settle) run in transactions and roll back on failure.
