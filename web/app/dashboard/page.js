@@ -82,6 +82,24 @@ export default function DashboardPage() {
     }
   }
 
+  async function cancelWait(queueId) {
+    setMsg("");
+    try {
+      const res = await fetch("/api/queue/cancel", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ queue_id: queueId }),
+      });
+      const body = await res.json().catch(() => ({}));
+      setMsgOk(res.ok);
+      setMsg(res.ok ? body.message || "Left the queue" : body.error || "Could not leave the queue");
+      if (res.ok) await load();
+    } catch {
+      setMsgOk(false);
+      setMsg("Could not reach the server");
+    }
+  }
+
   if (loading) return <p>Loading...</p>;
   if (error) return <div className="error">{error}</div>;
   if (!data) return null;
@@ -141,8 +159,11 @@ export default function DashboardPage() {
           ) : (
             <ul style={{ paddingLeft: "1.25rem", color: "var(--muted)" }}>
               {waiting_in.map((w) => (
-                <li key={w.queue_id}>
-                  Waiting for {w.game_title} since {fmt(w.queued_at)}
+                <li key={w.queue_id} style={{ marginBottom: 6 }}>
+                  Waiting for {w.game_title} since {fmt(w.queued_at)}{" "}
+                  <button className="btn btn-secondary" type="button" onClick={() => cancelWait(w.queue_id)}>
+                    Leave queue
+                  </button>
                 </li>
               ))}
             </ul>
