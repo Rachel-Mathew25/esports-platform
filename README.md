@@ -2,7 +2,7 @@
 
 DBMS Level 3 project, Team 22, PES University.
 
-Team: Rachel Mathew, Purvitha Machireddy (PES2UG24CS384)
+Team: Rachel Mathew (PES2UG24CS390), Purvitha Machireddy (PES2UG24CS384)
 
 ## What it does
 
