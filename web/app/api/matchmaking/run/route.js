@@ -97,6 +97,7 @@ export async function POST(request) {
       matches: created,
     });
   } catch (err) {
+    console.error("matchmaking error:", err);
     await conn.rollback();
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   } finally {

@@ -38,7 +38,7 @@ CREATE TABLE `elo_history` (
   CONSTRAINT `fk_eh_game` FOREIGN KEY (`game_id`) REFERENCES `games` (`game_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_eh_match` FOREIGN KEY (`match_id`) REFERENCES `matches` (`match_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_eh_player` FOREIGN KEY (`player_id`) REFERENCES `players` (`player_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -47,7 +47,7 @@ CREATE TABLE `elo_history` (
 
 LOCK TABLES `elo_history` WRITE;
 /*!40000 ALTER TABLE `elo_history` DISABLE KEYS */;
-INSERT INTO `elo_history` (`history_id`, `player_id`, `game_id`, `match_id`, `old_elo`, `new_elo`, `recorded_at`) VALUES (1,2,3,1,1450,1460,'2026-10-27 10:59:42'),(2,3,3,1,1320,1310,'2026-10-27 10:59:42');
+INSERT INTO `elo_history` (`history_id`, `player_id`, `game_id`, `match_id`, `old_elo`, `new_elo`, `recorded_at`) VALUES (1,2,3,1,1450,1460,'2026-10-27 10:59:42'),(2,3,3,1,1320,1310,'2026-10-27 10:59:42'),(3,4,3,2,1385,1394,'2026-10-27 15:37:04'),(4,5,3,2,1210,1201,'2026-10-27 15:37:04'),(5,2,3,3,1460,1437,'2026-10-27 15:42:41'),(6,3,3,3,1310,1333,'2026-10-27 15:42:41'),(7,2,3,8,1437,1448,'2026-10-28 03:07:09'),(8,3,3,8,1333,1322,'2026-10-28 03:07:09');
 /*!40000 ALTER TABLE `elo_history` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -110,7 +110,7 @@ CREATE TABLE `match_players` (
 
 LOCK TABLES `match_players` WRITE;
 /*!40000 ALTER TABLE `match_players` DISABLE KEYS */;
-INSERT INTO `match_players` VALUES (1,2,1,0,0,0,1450,1460),(1,3,2,0,0,0,1320,1310),(2,4,1,0,0,0,1385,NULL),(2,5,2,0,0,0,1210,NULL);
+INSERT INTO `match_players` VALUES (1,2,1,0,0,0,1450,1460),(1,3,2,0,0,0,1320,1310),(2,4,1,0,0,0,1385,1394),(2,5,2,0,0,0,1210,1201),(3,2,1,0,0,0,1460,1437),(3,3,2,0,0,0,1310,1333),(8,2,1,0,0,0,1437,1448),(8,3,2,0,0,0,1333,1322);
 /*!40000 ALTER TABLE `match_players` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
@@ -167,7 +167,7 @@ CREATE TABLE `matches` (
   CONSTRAINT `fk_matches_game` FOREIGN KEY (`game_id`) REFERENCES `games` (`game_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_matches_tourn` FOREIGN KEY (`tournament_id`) REFERENCES `tournaments` (`tournament_id`) ON DELETE SET NULL,
   CONSTRAINT `chk_match_times` CHECK (((`ended_at` is null) or (`started_at` is null) or (`ended_at` >= `started_at`)))
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -176,7 +176,7 @@ CREATE TABLE `matches` (
 
 LOCK TABLES `matches` WRITE;
 /*!40000 ALTER TABLE `matches` DISABLE KEYS */;
-INSERT INTO `matches` VALUES (1,3,NULL,'ranked','completed','2026-10-27 09:59:31','2026-10-27 10:59:42',1),(2,3,NULL,'ranked','in_progress','2026-10-27 10:29:31',NULL,NULL);
+INSERT INTO `matches` VALUES (1,3,NULL,'ranked','completed','2026-10-27 09:59:31','2026-10-27 10:59:42',1),(2,3,NULL,'ranked','completed','2026-10-27 10:29:31','2026-10-27 15:37:04',1),(3,3,NULL,'ranked','completed','2026-10-27 15:42:15','2026-10-27 15:42:41',2),(8,3,NULL,'ranked','completed','2026-10-28 03:06:18','2026-10-28 03:07:09',1);
 /*!40000 ALTER TABLE `matches` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -193,12 +193,13 @@ CREATE TABLE `matchmaking_queue` (
   `game_id` int NOT NULL,
   `queued_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `status` enum('waiting','matched','cancelled') COLLATE utf8mb4_unicode_ci DEFAULT 'waiting',
+  `active_slot` tinyint GENERATED ALWAYS AS (if((`status` = _utf8mb4'waiting'),1,NULL)) VIRTUAL,
   PRIMARY KEY (`queue_id`),
-  UNIQUE KEY `uq_queue_active` (`player_id`,`game_id`,`status`),
+  UNIQUE KEY `uq_queue_one_waiting` (`player_id`,`game_id`,`active_slot`),
   KEY `idx_queue_lookup` (`game_id`,`status`,`queued_at`),
   CONSTRAINT `fk_queue_game` FOREIGN KEY (`game_id`) REFERENCES `games` (`game_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_queue_player` FOREIGN KEY (`player_id`) REFERENCES `players` (`player_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -207,6 +208,7 @@ CREATE TABLE `matchmaking_queue` (
 
 LOCK TABLES `matchmaking_queue` WRITE;
 /*!40000 ALTER TABLE `matchmaking_queue` DISABLE KEYS */;
+INSERT INTO `matchmaking_queue` (`queue_id`, `player_id`, `game_id`, `queued_at`, `status`) VALUES (1,2,3,'2026-10-27 15:41:27','matched'),(2,3,3,'2026-10-27 15:41:28','matched'),(3,2,3,'2026-10-28 02:57:04','matched'),(4,3,3,'2026-10-28 02:57:56','matched');
 /*!40000 ALTER TABLE `matchmaking_queue` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
@@ -263,7 +265,7 @@ CREATE TABLE `player_game_stats` (
 
 LOCK TABLES `player_game_stats` WRITE;
 /*!40000 ALTER TABLE `player_game_stats` DISABLE KEYS */;
-INSERT INTO `player_game_stats` VALUES (2,1,1280,'Silver',25,12,13,0,'2026-10-25 10:59:31'),(2,3,1460,'Gold',21,13,8,0,'2026-10-27 10:59:42'),(3,1,1190,'Bronze',22,10,12,0,'2026-10-25 10:59:31'),(3,3,1310,'Silver',19,9,10,0,'2026-10-27 10:59:42'),(4,1,1510,'Platinum',30,19,11,0,'2026-10-25 10:59:31'),(4,3,1385,'Silver',15,8,7,0,'2026-10-25 10:59:31'),(5,1,1105,'Bronze',14,6,8,0,'2026-10-25 10:59:31'),(5,3,1210,'Bronze',12,5,7,0,'2026-10-25 10:59:31');
+INSERT INTO `player_game_stats` VALUES (2,1,1280,'Silver',25,12,13,0,'2026-10-25 10:59:31'),(2,3,1448,'Gold',23,14,9,0,'2026-10-28 03:07:09'),(3,1,1190,'Bronze',22,10,12,0,'2026-10-25 10:59:31'),(3,3,1322,'Silver',21,10,11,0,'2026-10-28 03:07:09'),(4,1,1510,'Platinum',30,19,11,0,'2026-10-25 10:59:31'),(4,3,1394,'Silver',16,9,7,0,'2026-10-27 15:37:04'),(5,1,1105,'Bronze',14,6,8,0,'2026-10-25 10:59:31'),(5,3,1201,'Bronze',13,5,8,0,'2026-10-27 15:37:04');
 /*!40000 ALTER TABLE `player_game_stats` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -292,7 +294,7 @@ CREATE TABLE `players` (
 
 LOCK TABLES `players` WRITE;
 /*!40000 ALTER TABLE `players` DISABLE KEYS */;
-INSERT INTO `players` VALUES (2,'AliceStrikes','APAC','India','2026-10-27'),(3,'BobFrag','NA','USA','2026-10-27'),(4,'CarlaClutch','EU','Germany','2026-10-27'),(5,'DanDagger','APAC','India','2026-10-27');
+INSERT INTO `players` VALUES (2,'AliceStrikes','APAC','India','2026-10-27'),(3,'BobFrag','NA','USA','2026-10-27'),(4,'CarlaClutch','EU','Germany','2026-10-27'),(5,'DanDagger','APAC','India','2026-10-27'),(7,'ErinAce','India',NULL,'2026-10-27');
 /*!40000 ALTER TABLE `players` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -377,7 +379,7 @@ CREATE TABLE `users` (
   UNIQUE KEY `uq_users_username` (`username`),
   UNIQUE KEY `uq_users_email` (`email`),
   CONSTRAINT `chk_username_len` CHECK ((char_length(`username`) >= 3))
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -386,7 +388,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` VALUES (1,'rachel','rachel@test.com','$2b$10$dkFS5LTW9tEEfCH23fzn1OYXaCbuEJvBg7HKWdJpbWv0F37QtX50W','admin','2026-10-27 10:51:19',1,'2026-10-27 10:55:45'),(2,'alice99','alice@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,NULL),(3,'bob_gg','bob@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,NULL),(4,'carla_x','carla@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,NULL),(5,'dev_dan','dan@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,NULL),(6,'mod_sam','sam@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','staff','2026-10-27 10:59:31',1,NULL);
+INSERT INTO `users` VALUES (1,'rachel','rachel@test.com','$2b$10$dkFS5LTW9tEEfCH23fzn1OYXaCbuEJvBg7HKWdJpbWv0F37QtX50W','admin','2026-10-27 10:51:19',1,'2026-10-28 03:04:15'),(2,'alice99','alice@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,'2026-10-28 02:56:39'),(3,'bob_gg','bob@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,'2026-10-28 02:57:51'),(4,'carla_x','carla@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,NULL),(5,'dev_dan','dan@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,NULL),(6,'mod_sam','sam@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','staff','2026-10-27 10:59:31',1,NULL),(7,'erin_ace','erin@esports.com','$2b$10$Kz7/HNXBdFTfFUlaAp9X4eXjd6eCvnQljmeJ2k.vM7FkX.oPBdwQa','player','2026-10-27 15:40:11',1,NULL);
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -522,4 +524,4 @@ DELIMITER ;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-10-27 16:29:58
+-- Dump completed on 2026-10-28  8:38:47

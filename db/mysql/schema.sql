@@ -38,7 +38,7 @@ CREATE TABLE `elo_history` (
   CONSTRAINT `fk_eh_game` FOREIGN KEY (`game_id`) REFERENCES `games` (`game_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_eh_match` FOREIGN KEY (`match_id`) REFERENCES `matches` (`match_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_eh_player` FOREIGN KEY (`player_id`) REFERENCES `players` (`player_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -137,7 +137,7 @@ CREATE TABLE `matches` (
   CONSTRAINT `fk_matches_game` FOREIGN KEY (`game_id`) REFERENCES `games` (`game_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_matches_tourn` FOREIGN KEY (`tournament_id`) REFERENCES `tournaments` (`tournament_id`) ON DELETE SET NULL,
   CONSTRAINT `chk_match_times` CHECK (((`ended_at` is null) or (`started_at` is null) or (`ended_at` >= `started_at`)))
-) ENGINE=InnoDB AUTO_INCREMENT=3 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=9 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -153,12 +153,13 @@ CREATE TABLE `matchmaking_queue` (
   `game_id` int NOT NULL,
   `queued_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `status` enum('waiting','matched','cancelled') COLLATE utf8mb4_unicode_ci DEFAULT 'waiting',
+  `active_slot` tinyint GENERATED ALWAYS AS (if((`status` = _utf8mb4'waiting'),1,NULL)) VIRTUAL,
   PRIMARY KEY (`queue_id`),
-  UNIQUE KEY `uq_queue_active` (`player_id`,`game_id`,`status`),
+  UNIQUE KEY `uq_queue_one_waiting` (`player_id`,`game_id`,`active_slot`),
   KEY `idx_queue_lookup` (`game_id`,`status`,`queued_at`),
   CONSTRAINT `fk_queue_game` FOREIGN KEY (`game_id`) REFERENCES `games` (`game_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_queue_player` FOREIGN KEY (`player_id`) REFERENCES `players` (`player_id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -290,7 +291,7 @@ CREATE TABLE `users` (
   UNIQUE KEY `uq_users_username` (`username`),
   UNIQUE KEY `uq_users_email` (`email`),
   CONSTRAINT `chk_username_len` CHECK ((char_length(`username`) >= 3))
-) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=10 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -425,4 +426,4 @@ DELIMITER ;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-10-27 16:29:58
+-- Dump completed on 2026-10-28  8:38:47
