@@ -16,6 +16,7 @@ export async function GET() {
     );
     return NextResponse.json(rows);
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("stats by-game error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

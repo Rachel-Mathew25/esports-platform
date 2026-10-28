@@ -95,3 +95,268 @@ MySQL stores everything relational and transactional: accounts, ratings, queues,
 MongoDB stores match events (kill, death, assist, with weapon and free-form metadata). They are append-heavy, and different games record different fields, so a schemaless document fits better than adding nullable columns to a relational table. Aggregation pipelines compute per-player kills and headshot percentage directly in the database.
 
 The API combines both: the kills analytics route runs a MongoDB aggregation and joins the display names from MySQL.
+
+## 6. Data dictionary
+
+PK = primary key, FK = foreign key, UQ = unique. Null column: Y means the column accepts NULL. Full DDL is in db/mysql/schema.sql.
+
+### users
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| user_id | int | N | PK, auto-increment |
+| username | varchar(30) | N | UQ |
+| email | varchar(100) | N | UQ |
+| password_hash | varchar(255) | N | Hashed password, never the plain text |
+| role | enum('admin','staff','player') | N | Drives access control |
+| created_at | timestamp | Y | |
+| is_active | tinyint(1) | Y | |
+| last_login | timestamp | Y | Added by alter_auth.sql |
+
+### games
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| game_id | int | N | PK |
+| title | varchar(60) | N | UQ |
+| genre | varchar(40) | Y | |
+| team_size | tinyint | N | Players per team (5 for Valorant and CS2, 1 for Chess.io) |
+| is_active | tinyint(1) | Y | |
+
+### players
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| player_id | int | N | PK and FK to users.user_id (shared key, no auto-increment) |
+| display_name | varchar(40) | N | FULLTEXT index idx_players_search |
+| region | varchar(30) | N | |
+| country | varchar(50) | Y | |
+| date_joined | date | Y | |
+
+### player_game_stats
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| player_id | int | N | PK part, FK to players |
+| game_id | int | N | PK part, FK to games |
+| elo_rating | int | N | Default 1000, CHECK elo_rating >= 0 |
+| rank_tier | varchar(20) | Y | Bronze, Silver, Gold, Platinum |
+| matches_played | int | N | |
+| wins | int | N | |
+| losses | int | N | |
+| draws | int | N | |
+| last_played_at | timestamp | Y | |
+
+### matchmaking_queue
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| queue_id | int | N | PK, auto-increment |
+| player_id | int | N | FK to players |
+| game_id | int | N | FK to games |
+| queued_at | timestamp | Y | Defaults to the current time |
+| status | enum('waiting','matched','cancelled') | Y | Defaults to waiting |
+| active_slot | tinyint | Y | Generated: 1 when status is waiting, otherwise NULL. Part of unique key uq_queue_one_waiting |
+
+### tournaments
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| tournament_id | int | N | PK |
+| game_id | int | N | FK to games |
+| name | varchar(100) | N | |
+| start_date | date | N | |
+| end_date | date | Y | |
+| status | enum('upcoming','ongoing','completed','cancelled') | Y | |
+| created_by | int | N | FK to users |
+
+### tournament_participants
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| tournament_id | int | N | PK part, FK to tournaments |
+| player_id | int | N | PK part, FK to players |
+| seed | int | Y | |
+| registered_at | timestamp | Y | |
+
+### matches
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| match_id | int | N | PK |
+| game_id | int | N | FK to games |
+| tournament_id | int | Y | FK to tournaments (NULL for non-tournament matches) |
+| match_type | enum('ranked','casual','tournament') | Y | |
+| status | enum('scheduled','in_progress','completed','cancelled') | Y | |
+| started_at | timestamp | Y | |
+| ended_at | timestamp | Y | CHECK ended_at >= started_at |
+| winning_team | tinyint | Y | 1 or 2, NULL for a draw or an unsettled match |
+
+### match_players
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| match_id | int | N | PK part, FK to matches |
+| player_id | int | N | PK part, FK to players |
+| team_number | tinyint | N | CHECK team_number IN (1, 2) |
+| kills | int | Y | |
+| deaths | int | Y | |
+| assists | int | Y | |
+| elo_before | int | N | Rating when the match was created |
+| elo_after | int | Y | Set when the match is settled. Setting it fires the stats trigger |
+
+### elo_history
+
+| Column | Type | Null | Notes |
+|---|---|---|---|
+| history_id | bigint | N | PK |
+| player_id | int | N | FK to players |
+| game_id | int | N | FK to games |
+| match_id | int | N | FK to matches |
+| old_elo | int | N | |
+| new_elo | int | N | |
+| elo_change | int | Y | Generated column: new_elo minus old_elo. Never inserted directly |
+| recorded_at | timestamp | Y | |
+
+### v_leaderboard (view)
+
+Columns: game_title, player_id, display_name, region, elo_rating, rank_tier, wins, losses, matches_played, leaderboard_rank. The rank is computed per game, ordered by ELO.
+
+### MongoDB: match_events (database esports_logs)
+
+| Field | Type | Notes |
+|---|---|---|
+| match_id | number | Refers to matches.match_id in MySQL |
+| player_id | number | Refers to players.player_id in MySQL |
+| type | string | kill, death or assist |
+| weapon | string | Optional |
+| meta | object | Free-form, for example headshot and round |
+| timestamp | date | When the event was recorded |
+
+## 7. Implementation
+
+### 7.1 Database objects
+
+| Object | Purpose |
+|---|---|
+| Trigger trg_queue_before_insert | Before a queue row is inserted, creates a default player_game_stats row (1000 ELO) if the player has none for that game. |
+| Trigger trg_match_players_after_update | When match_players.elo_after changes from NULL to a value, updates player_game_stats (rating, matches played, wins, losses, draws from matches.winning_team) and inserts a row into elo_history. |
+| Stored procedure sp_settle_match | Settles a match with ELO K=32 using team-average ratings. Details below. |
+| View v_leaderboard | Per-game ranking used by the public leaderboard. |
+| FULLTEXT index idx_players_search | Powers player search in BOOLEAN MODE. |
+| Unique key uq_queue_one_waiting | One waiting queue entry per player and game (see 7.4). |
+
+sp_settle_match (p_match_id, p_winning_team):
+
+- Runs in a transaction with an exit handler that rolls back and re-raises the error.
+- Locks the match with SELECT ... FOR UPDATE, so two settle requests cannot both pass.
+- Accepts winning team 1, 2 or NULL (draw). Anything else is rejected.
+- Raises error 1644 for "Match not found", "Match already settled or cancelled" and "Both teams need at least one player". The API maps these to 404, 409 and 400.
+- Updates matches, then sets elo_after for each player. That update fires the trigger, which updates the stats and writes the history rows.
+- Ratings are clamped with GREATEST(0, ...) so they never go negative.
+
+### 7.2 API routes
+
+| Route | Access | Purpose |
+|---|---|---|
+| POST /api/auth/register | public | Creates the users and players rows in one transaction |
+| POST /api/auth/login, GET /api/auth/me, POST /api/auth/logout | | Session handling with a JWT in an httpOnly cookie |
+| GET /api/health | public | Checks both databases |
+| GET /api/leaderboard | public | Reads v_leaderboard, with game, region and limit filters |
+| GET /api/players/search | logged in | Full-text search on display names |
+| GET /api/stats/by-game | public | Aggregates per game with GROUP BY and HAVING |
+| GET /api/games | public | Active games |
+| GET /api/players/me | player | Profile, ratings, last 20 ELO changes, waiting queues |
+| POST /api/queue/join | player | Joins a game queue |
+| POST /api/queue/cancel | player | Leaves a queue (own waiting entries only) |
+| POST /api/matchmaking/run | admin, staff | Pairs waiting players in one transaction |
+| GET /api/matches | admin, staff | Open matches with both teams |
+| POST /api/matches/[id]/settle | admin, staff | Calls sp_settle_match |
+| POST /api/matches/[id]/events | admin, staff | Inserts a MongoDB event after checking the match and the player |
+| GET /api/analytics/kills | logged in | MongoDB aggregation joined with MySQL names |
+| /api/tournaments routes | | Create, list and join (Purvitha, see docs/PURVITHA_TASKS.md) |
+
+### 7.3 Pages
+
+| Page | Who | What it does |
+|---|---|---|
+| / | everyone | Landing page |
+| /login, /register | everyone | Call the auth routes. Register logs the user in afterwards |
+| /leaderboard | everyone | Game and region filters. Player search for logged-in users |
+| /dashboard | player | Ratings, ELO history, join and leave queue |
+| /admin | admin, staff | Run matchmaking, settle open matches, record events, kills analytics |
+
+The navigation bar reads the session from /api/auth/me and shows links by role: Dashboard for players, Admin for admin and staff.
+
+### 7.4 Matchmaking and transactions
+
+POST /api/matchmaking/run works inside one transaction. It selects waiting queue rows with FOR UPDATE, groups players of each game whose ratings are within the ELO range (default 200), splits them into two teams with a snake draft so team strength stays balanced, inserts the match and match_players rows, and marks the queue rows as matched. If anything fails, the whole run rolls back and no half-created match remains. Running it twice does not match the same players twice, because matched rows are no longer waiting.
+
+Register uses the same pattern: the users and players inserts commit together or not at all, so a failed registration leaves no orphan rows.
+
+### 7.5 Security
+
+- Credentials and the JWT secret are read from environment variables (web/.env.local, which is git-ignored). Only web/.env.example with placeholders is committed.
+- Every protected route calls requireRole, which checks the cookie and returns 401 (not logged in) or 403 (wrong role).
+- Passwords are hashed with bcrypt (bcryptjs, cost factor 10) before they are stored.
+- All SQL uses parameterised queries.
+- The database enforces its own rules (CHECK, UNIQUE, foreign keys), so bad data is rejected even if the application has a bug.
+
+### 7.6 A defect found during testing
+
+Matchmaking worked the first time, then returned a 500 for players who had already been matched once. The server log showed a duplicate-key error on the original unique key (player_id, game_id, status): a finished matched row blocked the next match, and the same key would also have blocked a second cancelled row. The fix (db/mysql/alter_queue_index.sql) drops that key and adds a generated column active_slot that is 1 only for waiting rows, with a unique key on (player_id, game_id, active_slot). MySQL allows many NULLs in a unique index, so history rows never collide, while a player still cannot wait twice in the same game queue. After the fix, matchmaking returned 200, match 8 settled correctly (+11 and -11), and a player was able to cancel twice for the same game.
+
+## 8. Important queries
+
+### 8.1 Leaderboard view (JOIN and window function)
+
+~~~sql
+CREATE VIEW v_leaderboard AS
+SELECT g.title AS game_title, pgs.player_id, p.display_name, p.region,
+       pgs.elo_rating, pgs.rank_tier, pgs.wins, pgs.losses, pgs.matches_played,
+       RANK() OVER (PARTITION BY pgs.game_id ORDER BY pgs.elo_rating DESC) AS leaderboard_rank
+FROM player_game_stats pgs
+JOIN players p ON pgs.player_id = p.player_id
+JOIN games g   ON pgs.game_id = g.game_id;
+~~~
+
+The rank restarts for each game, and players with equal ratings share a rank. GET /api/leaderboard reads this view and applies the game, region and limit filters.
+
+### 8.2 Per-game statistics (GROUP BY and HAVING)
+
+~~~sql
+SELECT game_title,
+       COUNT(*) AS players,
+       ROUND(AVG(elo_rating)) AS avg_elo,
+       MAX(elo_rating) AS top_elo,
+       SUM(matches_played) AS total_matches
+FROM v_leaderboard
+GROUP BY game_title
+HAVING COUNT(*) >= 1
+ORDER BY avg_elo DESC;
+~~~
+
+Used by GET /api/stats/by-game. It aggregates over the view, so the view's joins are reused.
+
+### 8.3 Kills analytics (MongoDB aggregation)
+
+~~~js
+db.collection("match_events").aggregate([
+  { $match: { type: "kill" } },
+  { $group: {
+      _id: "$player_id",
+      kills: { $sum: 1 },
+      headshots: { $sum: { $cond: [{ $eq: ["$meta.headshot", true] }, 1, 0] } },
+      matches: { $addToSet: "$match_id" } } },
+  { $sort: { kills: -1 } },
+  { $limit: 10 }
+])
+~~~
+
+The route then looks up display names in MySQL and computes the headshot percentage:
+
+~~~sql
+SELECT player_id, display_name FROM players WHERE player_id IN (?);
+~~~
+
+This joins the two databases in the application: MongoDB does the counting over events, MySQL supplies the names. An optional match_id filter is added to the $match stage. The collection has an index on (match_id, timestamp).
