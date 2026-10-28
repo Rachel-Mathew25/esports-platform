@@ -9,6 +9,7 @@ export async function GET() {
     const events = await db.collection("match_events").countDocuments();
     return NextResponse.json({ mysql: rows[0], mongo: { match_events: events } });
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("route error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }

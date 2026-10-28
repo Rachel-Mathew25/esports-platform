@@ -360,3 +360,52 @@ SELECT player_id, display_name FROM players WHERE player_id IN (?);
 ~~~
 
 This joins the two databases in the application: MongoDB does the counting over events, MySQL supplies the names. An optional match_id filter is added to the $match stage. The collection has an index on (match_id, timestamp).
+
+### 8.4 Full-text player search
+
+~~~sql
+SELECT p.player_id, p.display_name, p.region, g.title AS game, s.elo_rating, s.rank_tier
+FROM players p
+LEFT JOIN player_game_stats s ON s.player_id = p.player_id
+LEFT JOIN games g ON g.game_id = s.game_id
+WHERE MATCH(p.display_name) AGAINST (? IN BOOLEAN MODE)
+ORDER BY s.elo_rating DESC
+LIMIT 20;
+~~~
+
+Used by GET /api/players/search. The search text is cleaned first: every character that is not a letter, digit or space is removed, then each word becomes a required prefix term. For example, "ali str" becomes "+ali* +str*". This stops users from injecting boolean operators into the full-text query, and prefix matching finds AliceStrikes from "ali". The value is passed as a bound parameter. Matching uses the FULLTEXT index idx_players_search, and the LEFT JOINs keep players who have no rating yet.
+
+### 8.5 Matchmaking queue selection (locking read)
+
+~~~sql
+SELECT q.queue_id, q.player_id, q.game_id, g.title, g.team_size,
+       COALESCE(s.elo_rating, 1000) AS elo
+FROM matchmaking_queue q
+JOIN games g ON g.game_id = q.game_id AND g.is_active = 1
+LEFT JOIN player_game_stats s ON s.player_id = q.player_id AND s.game_id = q.game_id
+WHERE q.status = 'waiting'   -- plus an optional game filter
+ORDER BY q.game_id, elo DESC, q.queued_at
+FOR UPDATE OF q;
+~~~
+
+Used by POST /api/matchmaking/run inside its transaction. FOR UPDATE OF q locks only the queue rows, so two matchmaking runs cannot pick the same players. COALESCE gives unrated players the default rating of 1000. The application then groups the rows by game, forms matches of team_size x 2 players whose ratings are within the ELO range, and splits each match into two teams with a snake draft.
+
+### 8.6 ELO calculation (inside sp_settle_match)
+
+~~~sql
+SET v_expected1 = 1 / (1 + POWER(10, (v_team2_avg - v_team1_avg) / 400));
+SET v_expected2 = 1 / (1 + POWER(10, (v_team1_avg - v_team2_avg) / 400));
+
+-- score: 1 for a win, 0 for a loss, 0.5 each for a draw
+UPDATE matches
+SET status = 'completed', winning_team = p_winning_team, ended_at = NOW()
+WHERE match_id = p_match_id;
+
+UPDATE match_players
+SET elo_after = GREATEST(0, elo_before + ROUND(v_k * (v_score1 - v_expected1)))
+WHERE match_id = p_match_id AND team_number = 1;
+~~~
+
+The expected score is the standard ELO formula, computed from the two teams' average ratings. A player's new rating is the old rating plus K times (actual score minus expected score), with K = 32. The matches row is updated first so that the trigger, which fires when elo_after is set, sees the real winning_team. The second UPDATE (team 2) is identical with v_score2 and v_expected2.
+
+Worked example from match 8 (Chess.io, a 1v1): Alice 1437 against Bob 1333. Alice's expected score is about 0.65, so when she wins she gains about 32 x (1 - 0.65) = 11 points and Bob loses the same, which matches the +11 and -11 stored in elo_history.

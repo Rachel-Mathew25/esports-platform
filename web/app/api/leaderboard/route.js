@@ -22,6 +22,7 @@ export async function GET(request) {
     const [rows] = await pool.query(sql, params);
     return NextResponse.json(rows);
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    console.error("route error:", err);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
