@@ -464,3 +464,90 @@ All connection details and the signing secret come from environment variables in
 ### 9.5 Error handling
 
 Routes return specific 4xx codes for bad input and permission problems. Unexpected failures are logged on the server and returned to the client as a generic "Internal server error", so database details are not exposed. Multi-step writes (register, matchmaking, settle) run in transactions and roll back on failure.
+
+## 10. Testing results
+
+All tests below were run against the local MySQL and MongoDB databases with the dev server running. API tests used curl with cookies saved from real logins (admin, staff and player accounts). Each row records the behaviour that was actually observed. The full test-case file is in tests/test_cases.md.
+
+### 10.1 Authentication and roles
+
+| Test | Expected | Observed |
+|---|---|---|
+| Register with an existing username or email | 409, no orphan rows | 409, no rows left in users or players |
+| Register with a short password or bad email | 400 | 400 |
+| Player calls an admin route | 403 | 403 |
+| Any protected route with no cookie | 401 | 401 |
+| Staff calls matchmaking | 200 | 200 (matches_created 0 when nobody waiting) |
+| Staff calls players/me or queue join | 403 | 403 |
+
+### 10.2 Queue
+
+| Test | Expected | Observed |
+|---|---|---|
+| Join the same game twice | 409 | 409 |
+| Join an unknown game | 404 | 404 |
+| Join with no game_id | 400 | 400 |
+| Admin joins a queue | 403 | 403 |
+| Cancel another player's entry | 404 | 404 |
+| Cancel own waiting entry | 200 | 200 |
+| Cancel the same entry again | 404 | 404 |
+| Cancel with an empty body | 400 | 400 |
+| Cancel with no cookie | 401 | 401 |
+
+### 10.3 Matchmaking
+
+| Test | Expected | Observed |
+|---|---|---|
+| elo_range 100 with ratings 1460 and 1310 | no match | 0 matches created |
+| Default range (200) with two close players | one match | match created |
+| Run matchmaking a second time | nothing new | 0 matches created |
+| elo_range of -5 | 400 | 400 |
+| Player calls matchmaking | 403 | 403 |
+
+### 10.4 Settling matches and ELO
+
+| Test | Expected | Observed |
+|---|---|---|
+| Settle an open match | ELO updated by trigger | player_game_stats updated |
+| elo_history after a settle | two equal and opposite rows | match 8: Alice +11, Bob -11 |
+| Settle the same match again | 409 | 409 |
+| Settle a missing match | 404 | 404 |
+| Hand check of ELO maths | about +11 | Alice 1437 vs Bob 1333: expected score 0.645, 32 x (1 - 0.645) = 11.4, stored +11 |
+
+### 10.5 MongoDB events and analytics
+
+| Test | Expected | Observed |
+|---|---|---|
+| Post an event with no cookie | 401 | 401 |
+| Post an event as admin | 201 | 201 |
+| Event for a player not in the match | 400 | 400 |
+| Event with a bad type | 400 | 400 |
+| Event for a missing match | 404 | 404 |
+| Event as a player | 403 | 403 |
+| Kills analytics with no cookie | 401 | 401 |
+| Kills analytics as admin | aggregated kills | BobFrag 3 kills (2 headshots, 67%), DanDagger 1 kill (100%) |
+| Kills analytics with limit=0 | 400 | 400 |
+
+### 10.6 Player profile
+
+| Test | Expected | Observed |
+|---|---|---|
+| players/me with no cookie | 401 | 401 |
+| players/me as admin | 403 | 403 |
+| players/me as Alice | 200 with stats, history, waiting_in | 200 with all three |
+
+### 10.7 Defects found and fixed during testing
+
+1. **Queue unique key.** The original key uq_queue_active (player_id, game_id, status) blocked a player from being matched twice. Running matchmaking for already-matched players returned 500 with a duplicate-entry error on the key. It was replaced with a generated column active_slot and the unique key uq_queue_one_waiting (player_id, game_id, active_slot), which only constrains waiting rows (db/mysql/alter_queue_index.sql). After the fix a new match (match 8) was created and settled correctly.
+2. **Wrong import.** One route imported pool as a default export, which returned 500. It now uses the named import.
+3. **Rollbacks.** Failed register and matchmaking transactions left no partial rows. Match ids 4 to 7 were skipped by auto-increment after rolled-back transactions, which is harmless.
+4. **Error leakage.** Several routes returned err.message to the client. They now return a generic 500 and log the real error on the server. Only the settle route still reads the database message, on purpose, to map procedure errors to 404, 409 and 400.
+
+### 10.8 Security audit
+
+- A search of app/api and lib for template-string SQL found three matches. One builds a boolean search string that is passed as a bound parameter, one builds an error message from a constant list, and one inserts a fixed fragment (AND q.game_id = ?) whose value is bound. No user input reaches SQL text.
+- A search for err.message in app/api shows only the settle route.
+
+### 10.9 Setup test
+
+full_dump.sql was loaded into an empty scratch database. It produced 10 tables and one view, 7 users, 8 leaderboard rows, 2 triggers and the procedure sp_settle_match.
