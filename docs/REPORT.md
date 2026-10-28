@@ -299,7 +299,7 @@ Register uses the same pattern: the users and players inserts commit together or
 - Credentials and the JWT secret are read from environment variables (web/.env.local, which is git-ignored). Only web/.env.example with placeholders is committed.
 - Every protected route calls requireRole, which checks the cookie and returns 401 (not logged in) or 403 (wrong role).
 - Passwords are hashed with bcrypt (bcryptjs, cost factor 10) before they are stored.
-- All SQL uses parameterised queries.
+- User input is never concatenated into SQL. Values are always passed as bound parameters (? placeholders). The only text inserted into a query is a fixed fragment chosen by the code itself (the optional game filter in matchmaking), and the supplied game_id is still bound as a parameter.
 - The database enforces its own rules (CHECK, UNIQUE, foreign keys), so bad data is rejected even if the application has a bug.
 
 ### 7.6 A defect found during testing
