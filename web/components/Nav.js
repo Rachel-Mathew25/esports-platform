@@ -49,6 +49,9 @@ export default function Nav() {
         <Link href="/leaderboard" className={cls("/leaderboard")}>
           Leaderboard
         </Link>
+        <Link href="/tournaments" className={cls("/tournaments")}>
+          Tournaments
+        </Link>
         {isPlayer && (
           <Link href="/dashboard" className={cls("/dashboard")}>
             Dashboard
