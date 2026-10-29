@@ -52,5 +52,5 @@ Each test ran inside `START TRANSACTION; ... ROLLBACK;` so the data was left unc
 | UI-1 | Tournaments link in navbar for a logged-in player | Link visible between Leaderboard and Dashboard | Visible: Leaderboard, Tournaments, Dashboard | Pass |
 | UI-2 | Join button on an upcoming tournament, player already registered | Server message shown | Red message "Already registered" shown | Pass |
 | UI-3 | Tournaments link logged out | Link visible | Tournaments link visible; list shown; Create form hidden; note "Log in as a player to join a tournament." shown | Pass |
-| UI-4 | Create form visible only to admin/staff | Form shown for admin, hidden for player | Admin (rachel): Create form visible. Player (alice99): Create form hidden, Join button shown on both upcoming tournaments | Pass |
+| UI-4 | Create form visible only to admin/staff | Form shown for admin, hidden for player | Admin (rachel): Create form visible. Player (alice99): Create form hidden, Join on Staff Cup, Registered on Autumn Chess Cup | Pass |
 | UI-5 | Successful join shows green message and participant count increases | Green message; count +1 | Players count 0 before; as bob_gg clicked Join on Staff Cup; green message "You joined the tournament."; Players count 1; DB shows one row, player_id 3 | Pass |
