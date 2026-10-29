@@ -550,4 +550,4 @@ All tests below were run against the local MySQL and MongoDB databases with the 
 
 ### 10.9 Setup test
 
-full_dump.sql was loaded into an empty scratch database. It produced 10 tables and one view, 7 users, 8 leaderboard rows, 2 triggers and the procedure sp_settle_match.
+full_dump.sql was loaded into an empty scratch database. It produced 10 tables and one view, 7 users, 8 leaderboard rows, 3 triggers (trg_match_players_after_update, trg_queue_before_insert, trg_tp_before_insert) and 2 stored procedures (sp_settle_match, sp_seed_tournament). The dump was regenerated after the tournament changes were merged.
