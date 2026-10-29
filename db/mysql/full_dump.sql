@@ -199,7 +199,7 @@ CREATE TABLE `matchmaking_queue` (
   KEY `idx_queue_lookup` (`game_id`,`status`,`queued_at`),
   CONSTRAINT `fk_queue_game` FOREIGN KEY (`game_id`) REFERENCES `games` (`game_id`) ON DELETE CASCADE,
   CONSTRAINT `fk_queue_player` FOREIGN KEY (`player_id`) REFERENCES `players` (`player_id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=5 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+) ENGINE=InnoDB AUTO_INCREMENT=7 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
 --
@@ -208,7 +208,7 @@ CREATE TABLE `matchmaking_queue` (
 
 LOCK TABLES `matchmaking_queue` WRITE;
 /*!40000 ALTER TABLE `matchmaking_queue` DISABLE KEYS */;
-INSERT INTO `matchmaking_queue` (`queue_id`, `player_id`, `game_id`, `queued_at`, `status`) VALUES (1,2,3,'2026-10-27 15:41:27','matched'),(2,3,3,'2026-10-27 15:41:28','matched'),(3,2,3,'2026-10-28 02:57:04','matched'),(4,3,3,'2026-10-28 02:57:56','matched');
+INSERT INTO `matchmaking_queue` (`queue_id`, `player_id`, `game_id`, `queued_at`, `status`) VALUES (1,2,3,'2026-10-27 15:41:27','matched'),(2,3,3,'2026-10-27 15:41:28','matched'),(3,2,3,'2026-10-28 02:57:04','matched'),(4,3,3,'2026-10-28 02:57:56','matched'),(5,2,3,'2026-10-28 03:09:49','cancelled'),(6,2,3,'2026-10-28 03:09:54','cancelled');
 /*!40000 ALTER TABLE `matchmaking_queue` ENABLE KEYS */;
 UNLOCK TABLES;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
@@ -325,6 +325,30 @@ LOCK TABLES `tournament_participants` WRITE;
 /*!40000 ALTER TABLE `tournament_participants` DISABLE KEYS */;
 /*!40000 ALTER TABLE `tournament_participants` ENABLE KEYS */;
 UNLOCK TABLES;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`localhost`*/ /*!50003 TRIGGER `trg_tp_before_insert` BEFORE INSERT ON `tournament_participants` FOR EACH ROW BEGIN
+  DECLARE current_count INT;
+  SELECT COUNT(*) INTO current_count
+    FROM tournament_participants
+   WHERE tournament_id = NEW.tournament_id;
+  IF current_count >= 16 THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'Tournament is full (maximum 16 participants)';
+  END IF;
+END */;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 
 --
 -- Table structure for table `tournaments`
@@ -388,7 +412,7 @@ CREATE TABLE `users` (
 
 LOCK TABLES `users` WRITE;
 /*!40000 ALTER TABLE `users` DISABLE KEYS */;
-INSERT INTO `users` VALUES (1,'rachel','rachel@test.com','$2b$10$dkFS5LTW9tEEfCH23fzn1OYXaCbuEJvBg7HKWdJpbWv0F37QtX50W','admin','2026-10-27 10:51:19',1,'2026-10-28 03:04:15'),(2,'alice99','alice@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,'2026-10-28 02:56:39'),(3,'bob_gg','bob@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,'2026-10-28 02:57:51'),(4,'carla_x','carla@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,NULL),(5,'dev_dan','dan@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,NULL),(6,'mod_sam','sam@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','staff','2026-10-27 10:59:31',1,NULL),(7,'erin_ace','erin@esports.com','$2b$10$Kz7/HNXBdFTfFUlaAp9X4eXjd6eCvnQljmeJ2k.vM7FkX.oPBdwQa','player','2026-10-27 15:40:11',1,NULL);
+INSERT INTO `users` VALUES (1,'rachel','rachel@test.com','$2b$10$dkFS5LTW9tEEfCH23fzn1OYXaCbuEJvBg7HKWdJpbWv0F37QtX50W','admin','2026-10-27 10:51:19',1,'2026-10-29 12:50:09'),(2,'alice99','alice@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,'2026-10-29 12:51:33'),(3,'bob_gg','bob@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,'2026-10-28 03:09:44'),(4,'carla_x','carla@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,NULL),(5,'dev_dan','dan@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','player','2026-10-27 10:59:31',1,NULL),(6,'mod_sam','sam@esports.com','$2b$10$KSJlh6WG6uL71OvhogS28O9Yd00KBxlYLAC.JPH/0KZjMoyv8xzPG','staff','2026-10-27 10:59:31',1,'2026-10-29 12:52:27'),(7,'erin_ace','erin@esports.com','$2b$10$Kz7/HNXBdFTfFUlaAp9X4eXjd6eCvnQljmeJ2k.vM7FkX.oPBdwQa','player','2026-10-27 15:40:11',1,NULL);
 /*!40000 ALTER TABLE `users` ENABLE KEYS */;
 UNLOCK TABLES;
 
@@ -416,6 +440,64 @@ SET character_set_client = @saved_cs_client;
 --
 -- Dumping routines for database 'esports_platform'
 --
+/*!50003 DROP PROCEDURE IF EXISTS `sp_seed_tournament` */;
+/*!50003 SET @saved_cs_client      = @@character_set_client */ ;
+/*!50003 SET @saved_cs_results     = @@character_set_results */ ;
+/*!50003 SET @saved_col_connection = @@collation_connection */ ;
+/*!50003 SET character_set_client  = utf8mb4 */ ;
+/*!50003 SET character_set_results = utf8mb4 */ ;
+/*!50003 SET collation_connection  = utf8mb4_0900_ai_ci */ ;
+/*!50003 SET @saved_sql_mode       = @@sql_mode */ ;
+/*!50003 SET sql_mode              = 'ONLY_FULL_GROUP_BY,STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION' */ ;
+DELIMITER ;;
+CREATE DEFINER=`root`@`localhost` PROCEDURE `sp_seed_tournament`(IN p_tournament_id INT)
+BEGIN
+  DECLARE v_status VARCHAR(20);
+  DECLARE v_count INT;
+
+  SELECT status INTO v_status
+    FROM tournaments
+   WHERE tournament_id = p_tournament_id;
+
+  IF v_status IS NULL THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Tournament not found';
+  END IF;
+  IF v_status <> 'upcoming' THEN
+    SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Tournament is not upcoming';
+  END IF;
+
+  SELECT COUNT(*) INTO v_count
+    FROM tournament_participants
+   WHERE tournament_id = p_tournament_id;
+  IF v_count < 2 THEN
+    SIGNAL SQLSTATE '45000'
+      SET MESSAGE_TEXT = 'At least 2 participants are required';
+  END IF;
+
+  
+  
+  UPDATE tournament_participants tp
+  JOIN (
+    SELECT tp2.player_id,
+           ROW_NUMBER() OVER (
+             ORDER BY COALESCE(pgs.elo_rating, 1000) DESC,
+                      tp2.registered_at ASC,
+                      tp2.player_id ASC
+           ) AS rn
+      FROM tournament_participants tp2
+      JOIN tournaments t ON t.tournament_id = tp2.tournament_id
+      LEFT JOIN player_game_stats pgs
+             ON pgs.player_id = tp2.player_id AND pgs.game_id = t.game_id
+     WHERE tp2.tournament_id = p_tournament_id
+  ) r ON r.player_id = tp.player_id
+  SET tp.seed = r.rn
+  WHERE tp.tournament_id = p_tournament_id;
+END ;;
+DELIMITER ;
+/*!50003 SET sql_mode              = @saved_sql_mode */ ;
+/*!50003 SET character_set_client  = @saved_cs_client */ ;
+/*!50003 SET character_set_results = @saved_cs_results */ ;
+/*!50003 SET collation_connection  = @saved_col_connection */ ;
 /*!50003 DROP PROCEDURE IF EXISTS `sp_settle_match` */;
 /*!50003 SET @saved_cs_client      = @@character_set_client */ ;
 /*!50003 SET @saved_cs_results     = @@character_set_results */ ;
@@ -524,4 +606,4 @@ DELIMITER ;
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-10-28  8:38:47
+-- Dump completed on 2026-10-29 18:25:03
