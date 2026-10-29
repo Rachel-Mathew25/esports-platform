@@ -551,3 +551,26 @@ All tests below were run against the local MySQL and MongoDB databases with the 
 ### 10.9 Setup test
 
 full_dump.sql was loaded into an empty scratch database. It produced 10 tables and one view, 7 users, 8 leaderboard rows, 3 triggers (trg_match_players_after_update, trg_queue_before_insert, trg_tp_before_insert) and 2 stored procedures (sp_settle_match, sp_seed_tournament). The dump was regenerated after the tournament changes were merged.
+
+### 10.10 Tournaments
+
+These tests were written and run by Purvitha Machireddy against her copy of the database (full list with commands in tests/test_cases.md). The tournament create form, join, and start-with-one-player checks were also repeated in the browser on the merged code with a test tournament, and behaved as below.
+
+| Test | Expected | Observed |
+|---|---|---|
+| Duplicate registration (DB-4) | duplicate key error | ERROR 1062 on the primary key (tournament_id, player_id) |
+| Delete a tournament that has matches (DB-5) | matches.tournament_id set to NULL | value changed from 2 to NULL (ON DELETE SET NULL) |
+| Failed insert inside a transaction (DB-6) | whole transaction rolled back | ERROR 1048 on NULL display_name, no leftover user |
+| Cap trigger trg_tp_before_insert (DB-7) | 16 allowed, 17th rejected | count reached 16, 17th rejected with ERROR 1644 (SQLSTATE 45000) Tournament is full |
+| Seeding with sp_seed_tournament (DB-8) | higher ELO gets seed 1 | Alice (1280) seed 1, Bob (1190) seed 2, seeds NULL again after rollback |
+| Join as admin (API-16) | 403 | 403 Forbidden |
+| Join with no login (API-17) | 401 | 401 Unauthorized |
+| Join a tournament that is not upcoming (API-18) | 409 | 409 Registration is closed |
+| Join a full tournament (API-19) | 409 | 409 Tournament is full |
+| Start as a player (API-20) | 403 | 403 Forbidden |
+| Start with fewer than 2 participants (API-21) | 409 | 409 At least 2 participants are required |
+| Start with 2 participants (API-22) | 200, ongoing, seeded by ELO | 200, status ongoing, Alice seed 1, Bob seed 2 |
+| My tournaments (API-23) | 200 with a list of ids | 200 with [1] |
+| Create form visibility (UI-4) | only admin and staff see it | visible for admin, hidden for a player, who sees Join or Registered |
+
+The cap is enforced in the database by the trigger, and the join route maps the trigger error to a 409 response, so the rule holds even if the API is bypassed.
