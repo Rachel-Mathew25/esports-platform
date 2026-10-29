@@ -242,6 +242,8 @@ Columns: game_title, player_id, display_name, region, elo_rating, rank_tier, win
 | Trigger trg_queue_before_insert | Before a queue row is inserted, creates a default player_game_stats row (1000 ELO) if the player has none for that game. |
 | Trigger trg_match_players_after_update | When match_players.elo_after changes from NULL to a value, updates player_game_stats (rating, matches played, wins, losses, draws from matches.winning_team) and inserts a row into elo_history. |
 | Stored procedure sp_settle_match | Settles a match with ELO K=32 using team-average ratings. Details below. |
+| Trigger trg_tp_before_insert | Before a tournament_participants row is inserted, rejects the insert if the tournament already has 16 participants. |
+| Stored procedure sp_seed_tournament | Assigns seeds 1..n to a tournament's participants by ELO rank. Details below. |
 | View v_leaderboard | Per-game ranking used by the public leaderboard. |
 | FULLTEXT index idx_players_search | Powers player search in BOOLEAN MODE. |
 | Unique key uq_queue_one_waiting | One waiting queue entry per player and game (see 7.4). |
@@ -254,6 +256,14 @@ sp_settle_match (p_match_id, p_winning_team):
 - Raises error 1644 for "Match not found", "Match already settled or cancelled" and "Both teams need at least one player". The API maps these to 404, 409 and 400.
 - Updates matches, then sets elo_after for each player. That update fires the trigger, which updates the stats and writes the history rows.
 - Ratings are clamped with GREATEST(0, ...) so they never go negative.
+
+sp_seed_tournament (p_tournament_id):
+
+- Raises error 1644 for "Tournament not found", "Tournament is not upcoming" and "At least 2 participants are required". The start route maps these to 404, 409 and 400.
+- Ranks the participants with ROW_NUMBER() OVER (ORDER BY ELO DESC, registered_at ASC, player_id ASC) and writes the result into tournament_participants.seed, so seed 1 is the highest ELO.
+- ELO comes from player_game_stats for the tournament's game. A player with no stats row counts as 1000.
+
+trg_tp_before_insert counts the existing participants before each insert and raises SQLSTATE 45000 "Tournament is full (maximum 16 participants)" once 16 are registered. The limit is enforced in the database, so it holds even if a request bypasses the API.
 
 ### 7.2 API routes
 
@@ -274,7 +284,11 @@ sp_settle_match (p_match_id, p_winning_team):
 | POST /api/matches/[id]/settle | admin, staff | Calls sp_settle_match |
 | POST /api/matches/[id]/events | admin, staff | Inserts a MongoDB event after checking the match and the player |
 | GET /api/analytics/kills | logged in | MongoDB aggregation joined with MySQL names |
-| /api/tournaments routes | | Create, list and join (Purvitha, see docs/PURVITHA_TASKS.md) |
+| GET /api/tournaments | public | Lists tournaments |
+| POST /api/tournaments | admin, staff | Creates a tournament |
+| POST /api/tournaments/[id]/join | player | Registers the player in a transaction. The cap trigger rejects the 17th entry (409 "Tournament is full"). A duplicate entry gives 409 "Already registered". |
+| POST /api/tournaments/[id]/start | admin, staff | Calls sp_seed_tournament, then sets the status to ongoing. Maps procedure errors to 404, 409 and 400. |
+| GET /api/tournaments/mine | player | Returns the ids of tournaments the player has joined |
 
 ### 7.3 Pages
 
