@@ -8,6 +8,7 @@ export default function TournamentsPage() {
   const [user, setUser] = useState(null);
   const [games, setGames] = useState([]);
   const [tournaments, setTournaments] = useState([]);
+  const [joined, setJoined] = useState([]);
   const [statusFilter, setStatusFilter] = useState("");
   const [gameFilter, setGameFilter] = useState("");
   const [loadError, setLoadError] = useState("");
@@ -33,6 +34,15 @@ export default function TournamentsPage() {
     else setLoadError((data && data.error) || "Failed to load tournaments");
   }, [statusFilter, gameFilter]);
 
+  const loadJoined = useCallback(async () => {
+    try {
+      const res = await fetch("/api/tournaments/mine");
+      if (!res.ok) return;
+      const data = await res.json().catch(() => null);
+      if (Array.isArray(data)) setJoined(data);
+    } catch {}
+  }, []);
+
   useEffect(() => {
     fetch("/api/auth/me")
       .then((r) => (r.ok ? r.json() : null))
@@ -47,6 +57,10 @@ export default function TournamentsPage() {
   useEffect(() => {
     loadTournaments();
   }, [loadTournaments]);
+
+  useEffect(() => {
+    if (user && user.role === "player") loadJoined();
+  }, [user, loadJoined]);
 
   async function createTournament(e) {
     e.preventDefault();
@@ -88,8 +102,27 @@ export default function TournamentsPage() {
       if (res.ok) {
         setMsg({ ok: true, text: "You joined the tournament." });
         loadTournaments();
+        loadJoined();
       } else {
         setMsg({ ok: false, text: data.error || "Could not join" });
+      }
+    } catch {
+      setMsg({ ok: false, text: "Network error" });
+    }
+  }
+
+  async function start(id) {
+    setMsg(null);
+    try {
+      const res = await fetch("/api/tournaments/" + id + "/start", {
+        method: "POST",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        setMsg({ ok: true, text: "Tournament started and seeded by ELO." });
+        loadTournaments();
+      } else {
+        setMsg({ ok: false, text: data.error || "Could not start tournament" });
       }
     } catch {
       setMsg({ ok: false, text: "Network error" });
@@ -212,12 +245,24 @@ export default function TournamentsPage() {
                     <td>{t.status}</td>
                     <td>{t.participants}</td>
                     <td>
-                      {isPlayer && t.status === "upcoming" && (
+                      {isPlayer &&
+                        t.status === "upcoming" &&
+                        (joined.includes(t.tournament_id) ? (
+                          <span className="pos">Registered</span>
+                        ) : (
+                          <button
+                            className="btn"
+                            onClick={() => join(t.tournament_id)}
+                          >
+                            Join
+                          </button>
+                        ))}
+                      {canCreate && t.status === "upcoming" && (
                         <button
                           className="btn"
-                          onClick={() => join(t.tournament_id)}
+                          onClick={() => start(t.tournament_id)}
                         >
-                          Join
+                          Start
                         </button>
                       )}
                     </td>
