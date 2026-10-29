@@ -614,3 +614,92 @@ These tests were written and run by Purvitha Machireddy against her copy of the 
 | Create form visibility (UI-4) | only admin and staff see it | visible for admin, hidden for a player, who sees Join or Registered |
 
 The cap is enforced in the database by the trigger, and the join route maps the trigger error to a 409 response, so the rule holds even if the API is bypassed.
+
+## 11. Screenshots
+
+![Home page](screenshots/01-home.png)
+
+Figure 1: Home page.
+
+![Register page](screenshots/02-register.png)
+
+Figure 2: Register page.
+
+![Login page](screenshots/03-login.png)
+
+Figure 3: Login page.
+
+![Leaderboard with game filter](screenshots/04-leaderboard.png)
+
+Figure 4: Public leaderboard filtered by game.
+
+![Player search](screenshots/05-search.png)
+
+Figure 5: Full-text player search.
+
+![Player dashboard](screenshots/06-dashboard.png)
+
+Figure 6: Player dashboard with ratings, queue and ELO history.
+
+![Matchmaking](screenshots/07-admin-matchmaking.png)
+
+Figure 7: Admin runs matchmaking and an open match appears.
+
+![Match settled](screenshots/08-admin-settled.png)
+
+Figure 8: Admin settles the match and the open list empties.
+
+![Kills analytics](screenshots/09-kills-analytics.png)
+
+Figure 9: Kills analytics from the MongoDB aggregation.
+
+![Forbidden page](screenshots/10-forbidden.png)
+
+Figure 10: A player opening /admin is refused with 403.
+
+![curl 401](screenshots/11-curl-401-403.png)
+
+Figure 11: API call without a cookie returns 401.
+
+![Tournaments logged out](screenshots/12-tournaments-loggedout.png)
+
+Figure 12: Tournaments page when logged out.
+
+![Tournaments as player](screenshots/13-tournaments-player.png)
+
+Figure 13: Tournaments page as a player (Join or Registered, no Create form).
+
+![Joined tournament](screenshots/14-tournaments-joined.png)
+
+Figure 14: A player joins a tournament.
+
+![Tournaments as admin](screenshots/15-tournaments-admin.png)
+
+Figure 15: Tournaments page as admin with the Create form.
+
+![ER diagram](screenshots/16-er-diagram.png)
+
+Figure 16: ER diagram.
+
+![MySQL objects](screenshots/17-mysql-objects.png)
+
+Figure 17: Triggers and stored routines in the database.
+
+## 12. Conclusion
+
+The project delivers an esports matchmaking and ELO leaderboard platform on MySQL and MongoDB with a Next.js web app. Players register, queue for a game, get matched, and have their ELO updated when staff settle the match. Tournaments support registration, a 16-player cap and ELO-based seeding.
+
+Coverage of the requirements:
+
+- SQL and NoSQL: MySQL for relational data, MongoDB for match events and the kills aggregation.
+- Advanced SQL features: a window-function view, two stored procedures, three triggers, a full-text index and a generated-column unique key.
+- Transactions: registration, matchmaking, settling, tournament join and tournament start.
+- Authentication with three roles (admin, staff, player), environment variables for configuration, and database-level validation with CHECK, UNIQUE and foreign key constraints.
+- Testing, with results recorded in section 10, and individual Git commits by both team members.
+
+Limitations:
+
+- Vector search was not implemented.
+- ELO uses team-average ratings with a fixed K of 32.
+- Tournaments have registration and seeding but no bracket progression.
+- The admin page shows a duplicated message after settling ("Match 9 settled. Match settled").
