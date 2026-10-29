@@ -14,6 +14,8 @@ Each test ran inside `START TRANSACTION; ... ROLLBACK;` so the data was left unc
 | DB-4 | Duplicate tournament registration is rejected | `INSERT INTO tournament_participants (tournament_id, player_id) VALUES (1, 2);` (player 2 already registered) | Duplicate key error | `ERROR 1062: Duplicate entry '1-2' for key 'tournament_participants.PRIMARY'` | Pass |
 | DB-5 | Deleting a tournament sets `matches.tournament_id` to NULL (ON DELETE SET NULL) | Insert temp tournament, point match 1 at it, delete the tournament, select the match | `tournament_id` becomes NULL | Before delete: `tournament_id = 2`. After delete: `NULL` | Pass |
 | DB-6 | A failed insert rolls back the whole transaction | Insert a user, then insert a `players` row with `display_name = NULL`, then `ROLLBACK` | Second insert fails; no leftover user | `ERROR 1048: Column 'display_name' cannot be null`; leftover count = 0 | Pass |
+| DB-7 | Cap trigger `trg_tp_before_insert` | Insert 15 fake participants into tournament 3 (bob already in), then insert a 17th | Count reaches 16; 17th insert rejected | `at_cap` = 16; ERROR 1644 (45000) Tournament is full (maximum 16 participants); leftover check: only (1,2) and (3,3) | Pass |
+| DB-8 | Procedure `sp_seed_tournament` | In a transaction: add alice to tournament 3 (bob in), `CALL sp_seed_tournament(3)`, then rollback | Higher ELO gets seed 1 | alice (Valorant 1280) seed 1, bob (1190) seed 2; after rollback both seeds NULL | Pass |
 
 ## 2. API tests
 
@@ -37,6 +39,11 @@ Each test ran inside `START TRANSACTION; ... ROLLBACK;` so the data was left unc
 | API-16 | Join as admin | `POST /api/tournaments/1/join` as rachel | 403 | 403 `Forbidden` | Pass |
 | API-17 | Join with no login | no cookie | 401 | 401 `Unauthorized` | Pass |
 | API-18 | Join a tournament that is not upcoming | set status to `ongoing`, then join as bob | 409 | 409 "Registration is closed: tournament is ongoing" | Pass |
+| API-19 | Join a full tournament | 15 fake rows + bob in tournament 3, then `POST /api/tournaments/3/join` as alice | 409 | 409 `Tournament is full` | Pass |
+| API-20 | Start as player | `POST /api/tournaments/3/start` as alice | 403 | 403 `Forbidden` | Pass |
+| API-21 | Start with fewer than 2 participants | `POST /api/tournaments/3/start` as sam, only bob registered | 409 | 409 `At least 2 participants are required` | Pass |
+| API-22 | Start with 2 participants | alice and bob registered, `POST /api/tournaments/3/start` as sam | 200, status ongoing, seeds by ELO | 200 `{"tournament_id":3,"status":"ongoing"}`; DB: ongoing, alice (player 2) seed 1, bob (player 3) seed 2 | Pass |
+| API-23 | My tournaments | `GET /api/tournaments/mine` as alice | 200, list of ids | 200 `[1]` | Pass |
 
 ## 3. UI tests (page `/tournaments`)
 
