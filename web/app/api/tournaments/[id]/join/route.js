@@ -61,7 +61,7 @@ export async function POST(request, { params }) {
       { tournament_id: tournamentId, player_id: playerId, registered: true },
       { status: 201 }
     );
-  }   } catch (err) {
+  } catch (err) {
     await conn.rollback();
     if (err.code === "ER_DUP_ENTRY")
       return NextResponse.json({ error: "Already registered" }, { status: 409 });
@@ -74,3 +74,4 @@ export async function POST(request, { params }) {
   } finally {
     conn.release();
   }
+}
