@@ -65,6 +65,8 @@ export async function POST(request, { params }) {
     await conn.rollback();
     if (err.code === "ER_DUP_ENTRY")
       return NextResponse.json({ error: "Already registered" }, { status: 409 });
+    if (err.sqlState === "45000")
+      return NextResponse.json({ error: "Tournament is full" }, { status: 409 });
     if (err.code === "ER_NO_REFERENCED_ROW_2")
       return NextResponse.json({ error: "No player profile for this account" }, { status: 400 });
     console.error(err);
