@@ -80,7 +80,8 @@ Admin and staff accounts have no player profile, so they cannot join queues and 
 
     db/mysql/    schema.sql (structure), full_dump.sql (structure and data),
                  routines.sql (triggers and procedure), seed.sql (demo data),
-                 alter_*.sql (migrations, already included in the dumps)
+                 alter_*.sql (migrations, already included in the dumps),
+                 tournaments.sql (participant cap trigger, ELO seeding procedure)
     db/mongo/    setup.js (collection, seed events, aggregation)
     web/         Next.js app: pages in app/, API routes in app/api/, helpers in lib/
     docs/        project report
