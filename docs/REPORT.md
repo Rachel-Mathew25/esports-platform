@@ -299,6 +299,7 @@ trg_tp_before_insert counts the existing participants before each insert and rai
 | /leaderboard | everyone | Game and region filters. Player search for logged-in users |
 | /dashboard | player | Ratings, ELO history, join and leave queue |
 | /admin | admin, staff | Run matchmaking, settle open matches, record events, kills analytics |
+| /tournaments | everyone | Tournament list with filters. Players see Join or Registered. Admin and staff also get a Create form and a Start button |
 
 The navigation bar reads the session from /api/auth/me and shows links by role: Dashboard for players, Admin for admin and staff.
 
