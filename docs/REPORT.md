@@ -425,6 +425,31 @@ The expected score is the standard ELO formula, computed from the two teams' ave
 
 Worked example from match 8 (Chess.io, a 1v1): Alice 1437 against Bob 1333. Alice's expected score is about 0.65, so when she wins she gains about 32 x (1 - 0.65) = 11 points and Bob loses the same, which matches the +11 and -11 stored in elo_history.
 
+### 8.7 Tournament seeding (inside sp_seed_tournament)
+
+~~~sql
+UPDATE tournament_participants tp
+JOIN (
+  SELECT tp2.player_id,
+         ROW_NUMBER() OVER (
+           ORDER BY COALESCE(pgs.elo_rating, 1000) DESC,
+                    tp2.registered_at ASC,
+                    tp2.player_id ASC
+         ) AS rn
+    FROM tournament_participants tp2
+    JOIN tournaments t ON t.tournament_id = tp2.tournament_id
+    LEFT JOIN player_game_stats pgs
+           ON pgs.player_id = tp2.player_id AND pgs.game_id = t.game_id
+   WHERE tp2.tournament_id = p_tournament_id
+) r ON r.player_id = tp.player_id
+SET tp.seed = r.rn
+WHERE tp.tournament_id = p_tournament_id;
+~~~
+
+The subquery ranks the tournament's participants with the window function ROW_NUMBER(). The highest ELO in the tournament's game gets rn = 1. The LEFT JOIN to player_game_stats means a player with no stats row still appears, and COALESCE treats the missing rating as 1000. Ties are broken by earlier registration and then by player_id, so every player gets a distinct seed. The outer UPDATE joins the ranking back to tournament_participants and writes rn into the seed column in a single statement.
+
+Worked example from the test in 10.10: Alice (1280) gets seed 1 and Bob (1190) gets seed 2. Rolling back the test sets both seeds back to NULL.
+
 ## 9. Architecture
 
 The application is a single Next.js project. React pages run in the browser and call API routes (route handlers) in the same project. The routes talk to the two databases.
